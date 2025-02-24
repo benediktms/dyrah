@@ -8,7 +8,7 @@ use super::{ClientMessage, Position, ServerMessage};
 
 pub struct Game {
     server: Server<LaminarTransport>,
-    clients: HashMap<String, u64>,
+    lobby: HashMap<String, u64>,
     world: World
 }
 
@@ -18,40 +18,41 @@ impl Game {
 
         Self {
             server: Server::new(transport, ServerConfig::default()),
-            clients: HashMap::new(),
+            lobby: HashMap::new(),
             world: World::default()
         }
     }
 
-    fn update(&mut self) {
-        self.server.poll();
-
-        if let Some(event) = self.server.recv_event() {
+    fn handle_events(&mut self) {
+        while let Some(event) = self.server.recv_event() {
             match event {
                 ServerEvent::ClientConnected(addr) => {
                     let player = self.world.spawn((Position { x: 0., y: 0. },));
+                    let player_id = player.to_bits();
+
+                    // sync existing players with new clients
+                    for (entity, (pos,)) in self.world.query::<(&Position,)>() {
+                        if player != entity {
+                            let msg = ServerMessage::PlayerConnected {
+                                id: entity.to_bits(),
+                                pos: Position { x: pos.x, y: pos.y }
+                            };
+                            
+                            self.server.send_reliable_to(&addr, &serialize(&msg).unwrap(), true);
+                        }
+                    }
+
                     let msg = ServerMessage::PlayerConnected {
-                        id: player.to_bits(),
+                        id: player_id,
                         pos: Position { x: 0., y: 0. }
                     };
 
                     self.server.broadcast_reliable(&serialize(&msg).unwrap(), true);
-                    self.clients.insert(addr.clone(), player.to_bits());
-
-                    for (entity, (pos,)) in self.world.query::<(&Position,)>() {
-                        if player != entity {
-                            let msg = ServerMessage::PlayerMoved {
-                                id: entity.to_bits(),
-                                pos: Position { x: pos.x, y: pos.y }
-                            };
-
-                            self.server.send_reliable_to(&addr, &serialize(&msg).unwrap(), true);
-                        }
-                    }
+                    self.lobby.insert(addr.clone(), player_id);
                 }
                 ServerEvent::MessageReceived(addr, bytes) => {
                     let client_msg = deserialize::<ClientMessage>(&bytes).unwrap();
-                    let player_id = self.clients.get(&addr).unwrap();
+                    let player_id = self.lobby.get(&addr).unwrap();
 
                     match client_msg {
                         ClientMessage::PlayerMove { x, y } => {
@@ -74,6 +75,11 @@ impl Game {
                 _ => {}
             }
         }
+    }
+
+    fn update(&mut self) {
+        self.server.poll();
+        self.handle_events();
     }
 
     pub fn run(&mut self, fps: u64) {

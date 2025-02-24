@@ -11,6 +11,30 @@ pub struct Game {
     player_id: Option<u64>
 }
 
+fn try_player_move() -> Option<ClientMessage> {
+    let (mut move_x, mut move_y) = (0., 0.);
+
+    if is_key_down(KeyCode::Right) || is_key_down(KeyCode::D) {
+        move_x += 1.;
+    }
+    if is_key_down(KeyCode::Left) || is_key_down(KeyCode::A) {
+        move_x -= 1.;
+    }
+    if is_key_down(KeyCode::Up) || is_key_down(KeyCode::W) {
+        move_y -= 1.;
+    }
+    if is_key_down(KeyCode::Down) || is_key_down(KeyCode::S) {
+        move_y += 1.;
+    }
+    
+    if move_x != 0. || move_y != 0. {
+        return Some(ClientMessage::PlayerMove { x: move_x, y: move_y });        
+    }
+
+    None
+}
+
+// systems
 fn render_system(world: &World) {
     for (_, (pos,)) in world.query::<(&Position,)>() {
         draw_rectangle(pos.x, pos.y, 32., 32., RED);
@@ -31,9 +55,7 @@ impl Game {
         }
     }
 
-    fn update(&mut self) {
-        self.client.poll();
-
+    fn handle_events(&mut self) {
         while let Some(event) = self.client.recv_event() {
             match event {
                 ClientEvent::Connected => {
@@ -65,25 +87,13 @@ impl Game {
                 }
             }
         }
+    }
 
-        let (mut move_x, mut move_y) = (0., 0.);
+    fn update(&mut self) {
+        self.client.poll();
+        self.handle_events();
 
-        if is_key_down(KeyCode::Right) {
-            move_x += 1.0;
-        }
-        if is_key_down(KeyCode::Left) {
-            move_x -= 1.0;
-        }
-        if is_key_down(KeyCode::Up) {
-            move_y -= 1.0;
-        }
-        if is_key_down(KeyCode::Down) {
-            move_y += 1.0;
-        }
-        
-        if move_x != 0.0 || move_y != 0.0 {
-            let msg = ClientMessage::PlayerMove { x: move_x, y: move_y };
-            
+        if let Some(msg) = try_player_move() {
             self.client.send(&serialize(&msg).unwrap());
         }
     }
