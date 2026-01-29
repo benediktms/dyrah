@@ -90,7 +90,7 @@ impl Game {
                 ));
 
                 self.lobby.insert(id, player);
-                if self.player_id.is_some() {
+                if Some(id) == self.player_id {
                     self.player = Some(player);
                 }
             }
