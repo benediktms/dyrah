@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
 use dyrah_shared::map::TiledMap;
-use egor::{
-    app::{Context, InitContext},
-    math::Vec2,
-};
+use egor::{math::Vec2, render::Graphics};
 
 pub struct Tileset {
     dimensions: (u32, u32),
@@ -25,13 +22,13 @@ impl Map {
         }
     }
 
-    pub fn load(&mut self, ctx: &mut InitContext<'_>) {
+    pub fn load(&mut self, gfx: &mut Graphics) {
         for tileset in &self.tiled.tilesets {
             if let Some(path) = &tileset.image {
                 let bytes = std::fs::read(format!("assets/{}", path)).unwrap();
                 let img = image::load_from_memory(&bytes).unwrap().to_rgba8();
                 let (w, h) = img.dimensions();
-                let tex = ctx.load_texture(&bytes);
+                let tex = gfx.load_texture(&bytes);
 
                 self.sets.insert(
                     tileset.firstgid,
@@ -46,7 +43,7 @@ impl Map {
         }
     }
 
-    pub fn draw_tile_layer(&self, ctx: &mut Context, layer_name: &str) {
+    pub fn draw_tile_layer(&self, gfx: &mut Graphics, layer_name: &str) {
         let layer = self.tiled.get_layer(layer_name).unwrap();
         let (layer_w, layer_h) = (layer.width.unwrap(), layer.height.unwrap());
         let (tile_w, tile_h) = (self.tiled.tilewidth, self.tiled.tileheight);
@@ -90,8 +87,7 @@ impl Map {
                         let draw_y =
                             (y * tile_h) as f32 - tileset_tile_h as f32 + tile_h as f32 + offset_y;
 
-                        ctx.graphics
-                            .rect()
+                        gfx.rect()
                             .at(Vec2::new(draw_x, draw_y))
                             .size(Vec2::new(tileset_tile_w as f32, tileset_tile_h as f32))
                             .texture(tex)
@@ -102,10 +98,10 @@ impl Map {
         }
     }
 
-    pub fn draw_tiles(&self, ctx: &mut Context) {
+    pub fn draw_tiles(&self, gfx: &mut Graphics) {
         for layer in &self.tiled.layers {
             if layer.visible && layer.data.is_some() {
-                self.draw_tile_layer(ctx, &layer.name);
+                self.draw_tile_layer(gfx, &layer.name);
             }
         }
     }

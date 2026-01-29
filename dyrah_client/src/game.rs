@@ -2,10 +2,10 @@ use std::collections::HashMap;
 
 use bincode::{deserialize, serialize};
 use egor::{
-    app::{Context, InitContext},
-    input::{KeyCode, MouseButton},
+    input::{Input, KeyCode, MouseButton},
     math::Vec2,
-    render::Color,
+    render::{Color, Graphics},
+    time::FrameTimer,
 };
 use secs::{Entity, World};
 use wrym::{
@@ -50,9 +50,9 @@ impl Game {
         }
     }
 
-    pub fn load(&mut self, ctx: &mut InitContext) {
-        self.map.load(ctx);
-        self.player_tex = Some(ctx.load_texture(include_bytes!("../../assets/wizard.png")));
+    pub fn load(&mut self, gfx: &mut Graphics) {
+        self.map.load(gfx);
+        self.player_tex = Some(gfx.load_texture(include_bytes!("../../assets/wizard.png")));
     }
 
     pub fn handle_events(&mut self) {
@@ -110,16 +110,15 @@ impl Game {
         }
     }
 
-    pub fn update(&mut self, ctx: &mut Context) {
+    pub fn update(&mut self, input: &Input, timer: &FrameTimer) {
         self.client.poll();
 
-        let mouse_pos = ctx.input.mouse_position();
-        let left = ctx.input.keys_held(&[KeyCode::KeyA, KeyCode::ArrowLeft]);
-        let up = ctx.input.keys_held(&[KeyCode::KeyW, KeyCode::ArrowUp]);
-        let right = ctx.input.keys_held(&[KeyCode::KeyD, KeyCode::ArrowRight]);
-        let down = ctx.input.keys_held(&[KeyCode::KeyS, KeyCode::ArrowDown]);
-        let mouse_tile_pos = ctx
-            .input
+        let mouse_pos = input.mouse_position();
+        let left = input.keys_held(&[KeyCode::KeyA, KeyCode::ArrowLeft]);
+        let up = input.keys_held(&[KeyCode::KeyW, KeyCode::ArrowUp]);
+        let right = input.keys_held(&[KeyCode::KeyD, KeyCode::ArrowRight]);
+        let down = input.keys_held(&[KeyCode::KeyS, KeyCode::ArrowDown]);
+        let mouse_tile_pos = input
             .mouse_released(MouseButton::Left)
             .then_some(mouse_pos)
             .map(|mp| self.map.tiled.world_to_tile(mp.into()));
@@ -129,12 +128,12 @@ impl Game {
             |_, _: &Player, pos: &mut WorldPos, target_pos: &TargetWorldPos, spr: &mut Sprite| {
                 if pos.vec != target_pos.vec {
                     let dir = (target_pos.vec - pos.vec).normalize_or_zero();
-                    pos.vec += dir * 100.0 * ctx.timer.delta;
+                    pos.vec += dir * 100.0 * timer.delta;
 
                     if dir.x.abs() > dir.y.abs() {
                         spr.anim.flip_x(dir.x < 0.0);
                     }
-                    spr.anim.update(ctx.timer.delta);
+                    spr.anim.update(timer.delta);
 
                     if pos.vec.distance(target_pos.vec) < 1.0 {
                         pos.vec = target_pos.vec;
@@ -145,7 +144,7 @@ impl Game {
             },
         );
 
-        self.last_input_time += ctx.timer.delta;
+        self.last_input_time += timer.delta;
         if self.last_input_time >= 0.2 && moving {
             self.last_input_time = 0.0;
 
@@ -162,24 +161,26 @@ impl Game {
         }
     }
 
-    pub fn render(&self, ctx: &mut Context) {
-        ctx.graphics.clear(Color::BLUE);
+    pub fn render(&self, gfx: &mut Graphics, timer: &FrameTimer) {
+        let screen_size = gfx.screen_size();
+        gfx.clear(Color::BLUE);
 
-        self.map.draw_tiles(ctx);
+        self.map.draw_tiles(gfx);
 
         self.world
             .query(|player, _: &Player, world_pos: &WorldPos, spr: &Sprite| {
                 let draw_pos = world_pos.vec + spr.anim.offset(spr.frame_size, spr.sprite_size);
-                ctx.graphics
-                    .rect()
+                gfx.rect()
                     .at(draw_pos)
                     .size(Vec2::splat(64.0))
                     .texture(self.player_tex.unwrap())
                     .uv(spr.anim.frame());
 
                 if Some(player) == self.player {
-                    ctx.graphics.camera().target(world_pos.vec);
+                    gfx.camera().center(world_pos.vec, screen_size);
                 }
             });
+
+        gfx.text(&format!("FPS: {}", timer.fps)).at((10.0, 10.0));
     }
 }

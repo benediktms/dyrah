@@ -3,19 +3,24 @@ mod game;
 mod map;
 mod sprite;
 
-use egor::app::App;
+use egor::app::{App, FrameContext};
 
 use crate::game::Game;
 
 fn main() {
-    App::init(Game::new(), |game, ctx| {
-        ctx.set_title("Dyrah");
+    let mut game = Game::new();
 
-        game.load(ctx);
-    })
-    .run(move |game, ctx| {
-        game.handle_events();
-        game.update(ctx);
-        game.render(ctx);
-    });
+    App::new().title("Dyrah").vsync(false).run(
+        move |FrameContext {
+                  gfx, input, timer, ..
+              }| {
+            if timer.frame == 0 {
+                game.load(gfx);
+            }
+
+            game.handle_events();
+            game.update(input, timer);
+            game.render(gfx, timer);
+        },
+    );
 }
